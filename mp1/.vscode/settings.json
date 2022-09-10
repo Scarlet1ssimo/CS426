@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "*.luastg": "lua",
+        "*.sage": "python",
+        "*.cfg": "sourcepawn",
+        "*.html": "html",
+        "streambuf": "cpp"
+    }
+}
