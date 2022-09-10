@@ -133,7 +133,7 @@ class_list
                 { $$ = single_Classes($1); }
         | class_list class ';'/* several classes */
                 { $$ = append_Classes($1,single_Classes($2)); }
-        | class_list error {yyerrok;verror("Semicolon missing");}
+        | class_list error {verror("Semicolon missing");}
         ;
 
 /* If no parent is specified, the class inherits from the Object class. */
