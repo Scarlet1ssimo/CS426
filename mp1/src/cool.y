@@ -194,7 +194,7 @@ expr_list_semicolon
                 { $$ = single_Expressions($1); }
         | expr_list_semicolon expr ';'/* several classes */
                 { $$ = append_Expressions($1,single_Expressions($2)); }
-        | error ';' { $$ = NULL; yyerrok; verror("expr_list_semicolon error");}
+        | expr_list_semicolon error ';' { $$ = NULL; yyerrok; verror("expr_list_semicolon error");}
         ;
 
 part_let_expr   
