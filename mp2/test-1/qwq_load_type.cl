@@ -1,8 +1,7 @@
 class Main{
     main():Int{ 
             {
-
-            if true then let a:Bool in{
+            let a:Bool in a<-if true then let a:Bool in{
                 a;
             } else let a:Bool in {
                 a;

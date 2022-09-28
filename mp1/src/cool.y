@@ -10,7 +10,8 @@
 #include "utilities.h"
 
 /* Add your own C declarations here */
-
+void verror(const char *s);
+int skip_class = 0;
 
 /************************************************************************/
 /*                DONT CHANGE ANYTHING IN THIS SECTION                  */
@@ -29,7 +30,6 @@ int omerrs = 0;              /* number of errors in lexing and parsing */
    error message of yyerror, since it will be used for grading puproses.
 */
 void yyerror(const char *s);
-void verror(const char *s);
 
 /*
    The VERBOSE_ERRORS flag can be used in order to provide more detailed error
@@ -142,7 +142,6 @@ class  : CLASS TYPEID '{' feature_list '}'
                               stringtable.add_string(curr_filename)); }
         | CLASS TYPEID INHERITS TYPEID '{' feature_list '}'
                 { $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
-        | CLASS '}' {yyerrok;verror("Skipping to next class");}
         ;
 
 feature_list : 
@@ -153,6 +152,10 @@ feature_list :
         | feature_list feature ';'/* several classes */
                 { $$ = append_Features($1,single_Features($2)); }
         | feature_list error ';' {yyerrok;verror("feature_list error");}
+        | feature_list CLASS error {
+                skip_class = 1;
+                yyerrok;verror("Skipping to next class");
+        }
         ;
 
 feature : OBJECTID '(' formal_list ')' ':' TYPEID '{' expr '}'  {$$=method($1,$3,$6,$8);}
@@ -179,7 +182,7 @@ case_list
         | case_list case ';'/* several classes */
                 { $$ = append_Cases($1,single_Cases($2)); }
         ;
-case    : OBJECTID ':' TYPEID DARROW expr {$$=branch($1,$3,$5);}
+case  : OBJECTID ':' TYPEID DARROW expr {$$=branch($1,$3,$5);}
 
 expr_list_comma
         : { $$ = nil_Expressions();}

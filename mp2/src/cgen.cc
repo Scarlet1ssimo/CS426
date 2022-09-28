@@ -747,10 +747,10 @@ operand cond_class::code(CgenEnvironment *env) {
   if (cgen_debug)
     std::cerr << "cond" << endl;
   ValuePrinter vp(*env->cur_stream);
-  auto pred_ = pred->code(env);
   auto label_true = env->new_label("true.", false),
        label_false = env->new_label("false.", false),
        label_end = env->new_label("end.", true);
+  auto pred_ = pred->code(env);
   vp.branch_cond(*env->cur_stream, pred_, label_true, label_false);
   vp.begin_block(label_true);
   auto ret_then = then_exp->code(env);
@@ -761,7 +761,8 @@ operand cond_class::code(CgenEnvironment *env) {
   vp.store(ret_else, alloca_op);
   vp.branch_uncond(label_end);
   vp.begin_block(label_end);
-  operand ret(INT32, env->new_name());
+
+  operand ret(alloca_op.get_type().get_deref_type(), env->new_name());
   vp.load(*env->cur_stream, alloca_op.get_type().get_deref_type(), alloca_op, ret);
   return ret;
 }
@@ -931,7 +932,6 @@ operand object_class::code(CgenEnvironment *env) {
   ValuePrinter vp(*env->cur_stream);
   operand alloca_op = *env->lookup(name);
   operand ret(alloca_op.get_type().get_deref_type(), env->new_name());
-  // operand ret(INT32, env->new_name());
   vp.load(*env->cur_stream, alloca_op.get_type().get_deref_type(), alloca_op, ret);
   return ret;
 }

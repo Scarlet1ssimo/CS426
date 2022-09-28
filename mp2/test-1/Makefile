@@ -10,6 +10,7 @@ include ../Makefile.common
 
 $(CGEN) ::
 	make -C ../src cgen-1
+cgen-1 : $(CGEN)
 
 %.ll: %.ast $(CGEN)
 	$(CGEN) $(CGENOPTS) < $< > $@
