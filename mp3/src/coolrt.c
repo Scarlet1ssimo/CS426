@@ -60,12 +60,24 @@ const String *Object_type_name(Object *self) {
 
 Object *Object_new() {
   Object *tmp = malloc(sizeof(Object));
+  if (!tmp) {
+    fprintf(stderr, "At %s(line %d): Out of memory\n", __FILE__, __LINE__);
+    Object_abort(0LL);
+  }
   tmp->vtblptr = &_Object_vtable_prototype;
   return tmp;
 }
 
 Object *Object_copy(Object *self) {
+  if (self == 0) {
+    fprintf(stderr, "At %s(line %d): self is NULL\n", __FILE__, __LINE__);
+    abort();
+  }
   Object *ptr = Object_new();
+  if (!ptr) {
+    fprintf(stderr, "At %s(line %d): Out of memory\n", __FILE__, __LINE__);
+    Object_abort(0LL);
+  }
   *ptr = *self;
   return ptr;
 }
@@ -173,43 +185,79 @@ int IO_in_int(IO *self) {
 
 IO *IO_new() {
   IO *tmp = malloc(sizeof(IO));
+  if (!tmp) {
+    fprintf(stderr, "At %s(line %d): Out of memory\n", __FILE__, __LINE__);
+    Object_abort(0LL);
+  }
   tmp->vtblptr = &_IO_vtable_prototype;
   return tmp;
 }
 
 Int *Int_new() {
   Int *tmp = malloc(sizeof(Int));
+  if (!tmp) {
+    fprintf(stderr, "At %s(line %d): Out of memory\n", __FILE__, __LINE__);
+    Object_abort(0LL);
+  }
   tmp->vtblptr = &_Int_vtable_prototype;
   tmp->val = 0;
   return tmp;
 }
 void Int_init(Int *self, int i) {
+  if (self == 0) {
+    fprintf(stderr, "At %s(line %d): self is NULL\n", __FILE__, __LINE__);
+    abort();
+  }
   self->val = i;
 }
 
 Bool *Bool_new() {
   Bool *tmp = malloc(sizeof(Bool));
+  if (!tmp) {
+    fprintf(stderr, "At %s(line %d): Out of memory\n", __FILE__, __LINE__);
+    Object_abort(0LL);
+  }
   tmp->vtblptr = &_Bool_vtable_prototype;
   tmp->val = 0;
   return tmp;
 }
 void Bool_init(Bool *self, bool i) {
+  if (self == 0) {
+    fprintf(stderr, "At %s(line %d): self is NULL\n", __FILE__, __LINE__);
+    abort();
+  }
   self->val = i;
 }
 
 String *String_new() {
   String *tmp = malloc(sizeof(String));
+  if (!tmp) {
+    fprintf(stderr, "At %s(line %d): Out of memory\n", __FILE__, __LINE__);
+    Object_abort(0LL);
+  }
   tmp->vtblptr = &_String_vtable_prototype;
   tmp->val = "";
   return tmp;
 }
 int String_length(String *self) {
+  if (self == 0) {
+    fprintf(stderr, "At %s(line %d): self is NULL\n", __FILE__, __LINE__);
+    abort();
+  }
   return strlen(self->val);
 }
 String *String_concat(String *self, String *nxt) {
+  if (self == 0 || nxt == 0) {
+    fprintf(stderr, "At %s(line %d): NULL object\n", __FILE__, __LINE__);
+    abort();
+  }
   int n = String_length(self);
   int m = String_length(nxt);
   char *cptr = malloc(sizeof(char) * (n + m + 1));
+  if (!cptr) {
+    fprintf(stderr, "At %s(line %d): Out of memory\n", __FILE__, __LINE__);
+    Object_abort(0LL);
+  }
   strncpy(cptr, self->val, n);
   strncpy(cptr + n, nxt->val, m);
   cptr[n + m] = 0;
@@ -218,14 +266,21 @@ String *String_concat(String *self, String *nxt) {
   return s;
 }
 String *String_substr(String *self, int i, int l) {
+  if (self == 0) {
+    fprintf(stderr, "At %s(line %d): NULL object\n", __FILE__, __LINE__);
+    abort();
+  }
   int n = String_length(self);
-  if (i < 0 || i >= n || i + l < 0 || i + l >= n) {
-    fprintf(stderr, "At %s(line %d): Invalid string substr in String::substr()\n",
+  if (i < 0 || i >= n || i + l < 0 || i + l > n) {
+    fprintf(stderr, "At %s(line %d): Substring out of range\n",
             __FILE__, __LINE__);
     Object_abort((Object *)self);
   }
   char *cptr = malloc(sizeof(char) * (l + 1));
-  //TODO: OOM
+  if (!cptr) {
+    fprintf(stderr, "At %s(line %d): Out of memory\n", __FILE__, __LINE__);
+    Object_abort(0LL);
+  }
   strncpy(cptr, self->val + i, l);
   cptr[l] = 0;
   String *s = String_new();

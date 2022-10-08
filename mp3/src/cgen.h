@@ -48,6 +48,8 @@ class CgenClassTable : public cool::SymbolTable<Symbol, CgenNode> {
   CgenNode *root();
   int get_num_classes() const { return current_tag; }
 
+  std::map<Symbol, string> const_str;
+
  private:
   // COMPLETE FUNCTIONS
 
@@ -82,6 +84,27 @@ class CgenClassTable : public cool::SymbolTable<Symbol, CgenNode> {
   // ADD CODE HERE
 };
 
+struct attribute {
+  Symbol name;
+  Symbol ret_type;
+  Symbol from;
+  int from_basic;
+  int index;
+};
+struct signature {
+  Symbol name;
+  Symbol ret_type;
+  std::vector<Symbol> args;
+  Symbol from;
+  int from_basic;
+  int index;
+  string get_signature() {
+    if (from_basic)
+      return "@" + string(from->get_string()) + "_" + string(name->get_string());
+    else
+      return "@" + string(from->get_string()) + "." + string(name->get_string());
+  }
+};
 //
 // Each CgenNode corresponds to a Cool class.  As such, it is responsible for
 // performing code generation on the class level.  This includes laying out
@@ -108,6 +131,7 @@ class CgenNode : public class__class {
   int max_child;
 
   // ADD CODE HERE
+  int attr_ctr, method_ctr;
 
  public:
   // COMPLETE FUNCTIONS
@@ -137,50 +161,55 @@ class CgenNode : public class__class {
 
   // Class codegen. You need to write the body of this function.
   void code_class();
-  void code_new_object();
+  void code_new_object(CgenEnvironment *);
 
   // ADD CODE HERE
   string get_type_name() { return string(name->get_string()); }
 
-  struct signature {
-    string name;
-    string ret_type;
-    std::vector<string> args;
-    string from;
-    int from_basic;
-    string get_signature() {
-      if (from_basic)
-        return "@" + from + "_" + name;
-      else
-        return "@" + from + "." + name;
+  void add_method(Symbol k, Symbol ret_type, vector<Symbol> &v) {
+    if (method_layout.find(k) != method_layout.end()) {
+      signature s{k, ret_type, v, get_name(), basic(), method_layout[k].index};
+      assert(s.name == method_layout[k].name);
+      assert(s.ret_type == method_layout[k].ret_type);
+      assert(s.args == method_layout[k].args);
+      method_layout[k] = s;
+    } else {
+      signature s{k, ret_type, v, get_name(), basic(), method_ctr++};
+      method_layout[k] = s;
     }
-  };
-  // typedef vector<std::pair<string, signature>> layout;
-  // typedef vector<std::pair<string, signature>>::iterator layout_iter;
-  // static layout_iter find(layout &layout, string s) {
-  //   for (auto i = layout.begin(); i != layout.end(); i++)
-  //     if (i->first == s) return i;
-  //   return layout.end();
-  // }
-
-  void add_method(signature s) {
-    // layout_iter i = find(method_layout, s.name);
-    s.from = this->get_name()->get_string();
-    s.from_basic = basic();
-    if (method_layout.find(s.name) != method_layout.end()) {
-      assert(s.name == method_layout[s.name].name);
-      assert(s.ret_type == method_layout[s.name].ret_type);
-      assert(s.args == method_layout[s.name].args);
-    } else
-      method_order.push_back(s.name);
-    method_layout[s.name] = s;
   }
-  void add_attr(signature s) {
-    s.from = this->get_name()->get_string();
-    s.from_basic = basic();
-    assert(attr_layout.find(s.name) == attr_layout.end());
-    attr_layout[s.name] = s;
-    attr_order.push_back(s.name);
+  signature get_method(Symbol k) {
+    assert(is_method(k));
+    return method_layout[k];
+  }
+  int is_method(Symbol k) {
+    return method_layout.count(k);
+  }
+
+  void add_attr(Symbol k, Symbol type) {
+    attribute a{k, type, get_name(), basic(), attr_ctr++};
+    assert(attr_layout.find(k) == attr_layout.end());
+    attr_layout[k] = a;
+  }
+  attribute get_attr(Symbol k) {
+    assert(is_attr(k));
+    return attr_layout[k];
+  }
+  int is_attr(Symbol k) {
+    return attr_layout.count(k);
+  }
+  op_type sym2type(Symbol k);
+  vector<op_type> attr;
+  vector<op_type> method;
+  vector<const_value> init_val;
+  std::map<Symbol, signature> method_layout;
+  std::map<Symbol, attribute> attr_layout;
+
+  bool is_derive_of(Symbol base) {
+    for (auto p = this; p; p = p->parentnd) {
+      if (p->name == base) return true;
+    }
+    return false;
   }
 
  private:
@@ -189,9 +218,8 @@ class CgenNode : public class__class {
   void layout_features();
 
   // vector<std::pair<string, signature>> method_layout, attr_layout;
-  std::map<string, signature> method_layout, attr_layout;
-  std::map<string, signature> method_layout, attr_layout;
-  vector<string> method_order, attr_order;
+  // std::map<string, signature> method_layout, attr_layout;
+  // vector<string> method_order, attr_order;
 };
 
 //
@@ -216,6 +244,8 @@ class CgenEnvironment {
   CgenNode *cur_class;
 
  public:
+  Symbol control;
+  operand res;
   std::ostream *cur_stream;
 
   // fresh name generation functions
@@ -242,9 +272,31 @@ class CgenEnvironment {
   // Must return the CgenNode for a class given the symbol of its name
   CgenNode *type_to_class(Symbol t);
   // ADD CODE HERE
-  // int get_attr_idx(Symbol name){
-  //   cur_class->
-  // }
+  int is_attr(Symbol name) {
+    return cur_class->is_attr(name);
+  }
+  int is_method(Symbol name) {
+    return cur_class->is_method(name);
+  }
+  attribute get_attr(Symbol name) {
+    return cur_class->get_attr(name);
+  }
+  signature get_method(Symbol name) {
+    return cur_class->get_method(name);
+  }
+  CgenNode *str2class(const char *str) {
+    return get_class()->get_classtable()->lookup(
+        idtable.add_string((char *)str));
+  }
+  Symbol type2sym(op_type op) {
+    if (op.get_id() == INT32)
+      return str2class("Int")->get_name();
+    if (op.get_id() == INT1)
+      return str2class("Bool")->get_name();
+    auto ret = str2class((char *)op.get_name().substr(1, op.get_name().length() - 2).c_str());
+    assert(ret != NULL);
+    return ret->get_name();
+  }
 };
 
 // Utitlity function
