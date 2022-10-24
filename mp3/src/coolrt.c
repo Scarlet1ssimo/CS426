@@ -73,12 +73,13 @@ Object *Object_copy(Object *self) {
     fprintf(stderr, "At %s(line %d): self is NULL\n", __FILE__, __LINE__);
     abort();
   }
-  Object *ptr = Object_new();
+  int size=self->vtblptr->class_size;
+  Object *ptr = malloc(size);
   if (!ptr) {
     fprintf(stderr, "At %s(line %d): Out of memory\n", __FILE__, __LINE__);
     Object_abort(0LL);
   }
-  *ptr = *self;
+  memcpy(ptr, self, size);
   return ptr;
 }
 
