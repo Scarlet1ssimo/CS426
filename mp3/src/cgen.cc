@@ -925,10 +925,10 @@ operand conform(operand src, op_type type, CgenEnvironment *env) {
     cerr << "conform: void to init val" << endl;
     return type2initval(type, env);
   }
-  Symbol src_ = env->type2sym(src.get_type()), dst_ = env->type2sym(type);
+  // Symbol src_ = env->type2sym(src.get_type()), dst_ = env->type2sym(type);
   // src_:A*,dst_:Main*
-  cerr << ";conform:" << src_ << "(" + src.get_type().get_name() + ") -> " << dst_ << "(" + type.get_name() + ")"
-       << ": ";
+  // cerr << ";conform:" << src_ << "(" + src.get_type().get_name() + ") -> " << dst_ << "(" + type.get_name() + ")"
+  //      << ": ";
   if (src.get_type().is_same_with(type)) {
     cerr << "identical" << endl;
     return src;
@@ -1200,12 +1200,22 @@ operand eq_class::code(CgenEnvironment *env) {
   ValuePrinter vp(o);
   auto e1_ = e1->code(env), e2_ = e2->code(env);
   operand ret(INT1, env->new_name());
+  // cout << ";;;;" << e1_.get_type().get_name() << e2_.get_type().get_name();
   if (is_basic(e1_.get_type())) {
     e2_ = conform(e2_, e1_.get_type(), env);
+    // cout<<";1";
   } else if (is_basic(e2_.get_type())) {
     e1_ = conform(e1_, e2_.get_type(), env);
+    // cout<<";2";
+  } else if (!e1_.get_type().is_string_object() && !e1_.get_type().is_same_with(e2_.get_type())) {
+    assert(e1_.get_type().is_ptr());
+    assert(e2_.get_type().is_ptr());
+    e1_ = conform(e1_, INT8_PTR, env);
+    e2_ = conform(e2_, INT8_PTR, env);
+    // cout<<";3";
   }
   if (e1_.get_type().is_string_object()) {
+    // cout<<";4";
     operand str1(INT8_PTR, env->new_name());
     operand str2(INT8_PTR, env->new_name());
     operand str_ptr1(INT8_PPTR, env->new_name());
@@ -1219,6 +1229,7 @@ operand eq_class::code(CgenEnvironment *env) {
     vp.call(o, {INT8_PTR, INT8_PTR}, "strcmp", true, {str1, str2}, cmp_ret);
     vp.icmp(o, EQ, cmp_ret, int_value(0), ret);
   } else {
+    // cout<<";5";
     vp.icmp(o, EQ, e1_, e2_, ret);
   }
   return ret;
