@@ -135,14 +135,14 @@ class RegAllocSimple : public MachineFunctionPass {
         DBGS("REGFIND") << "Try1" << endl;
         for (auto R : RegClassInfo.getOrder(RC)) {
             if (!IsAllocByLiveVirtReg(R) && !IsExistingPhysReg(R)) {
-                DBGS("REGFIND") << "Looking@" << printReg(R) << endl;
+                // DBGS("REGFIND") << "Looking@" << printReg(R) << endl;
                 if (VirtRegAcrossFunction.contains(&MO)) {
                     // - Try allocate callee-saved reg if across calls
                     if (TRI->isCalleeSavedPhysReg(R, *MO.getParent()->getParent()->getParent()))
                         return R;
                 } else {
                     // - Try allocate caller-saved reg if not across calls
-                    if (TRI->isCallerPreservedPhysReg(R, *MO.getParent()->getParent()->getParent()))
+                    if (!TRI->isCalleeSavedPhysReg(R, *MO.getParent()->getParent()->getParent()))
                         return R;
                 }
             }
@@ -411,7 +411,7 @@ class RegAllocSimple : public MachineFunctionPass {
         // x don't spill after killed
         // x use callee saved register for vreg across function
 
-        // setKillFlags(MF);
+        setKillFlags(MF);
 
         SpillMap.clear();
         // Allocate each basic block locally
