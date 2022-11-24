@@ -135,6 +135,7 @@ class RegAllocSimple : public MachineFunctionPass {
         DBGS("REGFIND") << "Try1" << endl;
         for (auto R : RegClassInfo.getOrder(RC)) {
             if (!IsAllocByLiveVirtReg(R) && !IsExistingPhysReg(R)) {
+                DBGS("REGFIND") << "Looking@" << printReg(R) << endl;
                 if (VirtRegAcrossFunction.contains(&MO)) {
                     // - Try allocate callee-saved reg if across calls
                     if (TRI->isCalleeSavedPhysReg(R, *MO.getParent()->getParent()->getParent()))
@@ -356,7 +357,7 @@ class RegAllocSimple : public MachineFunctionPass {
                 }
             }
         }
-        for (bool changed = 1; !changed;) {
+        for (bool changed = 1; changed;) {
             changed = 0;
             for (auto &MBB : MF) {
                 auto &RS = ReachableVReg[&MBB];
