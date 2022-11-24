@@ -661,6 +661,7 @@ void CgenNode::setup(int tag, int depth) {
     args.push_back(self_type);
     from_arg.push_back(::sym2type(item.from, item.from));
     for (auto kk : item.args) {
+      cerr << kk << endl;
       args.push_back(sym2type(kk));
       from_arg.push_back(::sym2type(kk, item.from));
     }
@@ -786,6 +787,7 @@ void CgenNode::code_new_object(CgenEnvironment *env) {
         ptr->code(env);
       }
     }
+    
     vp.store(conform(env->res, tmp.get_type().get_deref_type(), env), tmp);
   }
 
@@ -1066,7 +1068,7 @@ operand cond_class::code(CgenEnvironment *env) {
        label_false = env->new_label("false.", false),
        label_end = env->new_label("end.", true);
   auto pred_ = pred->code(env);
-  vp.branch_cond(*env->cur_stream, pred_, label_true, label_false);
+  vp.branch_cond(*env->cur_stream, conform(pred_, INT1, env), label_true, label_false);
   vp.begin_block(label_true);
   auto ret_then = then_exp->code(env);
   vp.store(conform(ret_then, alloca_op.get_type().get_deref_type(), env), alloca_op);
@@ -1131,7 +1133,7 @@ operand plus_class::code(CgenEnvironment *env) {
   if (cgen_debug)
     std::cerr << "plus" << endl;
   ValuePrinter vp(*env->cur_stream);
-  auto e1_ = e1->code(env), e2_ = e2->code(env);
+  auto e1_ = conform(e1->code(env), INT32, env), e2_ = conform(e2->code(env), INT32, env);
   operand ret(INT32, env->new_name());
   vp.add(*env->cur_stream, e1_, e2_, ret);
   return ret;
@@ -1141,7 +1143,7 @@ operand sub_class::code(CgenEnvironment *env) {
   if (cgen_debug)
     std::cerr << "sub" << endl;
   ValuePrinter vp(*env->cur_stream);
-  auto e1_ = e1->code(env), e2_ = e2->code(env);
+  auto e1_ = conform(e1->code(env), INT32, env), e2_ = conform(e2->code(env), INT32, env);
   operand ret(INT32, env->new_name());
   vp.sub(*env->cur_stream, e1_, e2_, ret);
   return ret;
@@ -1151,7 +1153,7 @@ operand mul_class::code(CgenEnvironment *env) {
   if (cgen_debug)
     std::cerr << "mul" << endl;
   ValuePrinter vp(*env->cur_stream);
-  auto e1_ = e1->code(env), e2_ = e2->code(env);
+  auto e1_ = conform(e1->code(env), INT32, env), e2_ = conform(e2->code(env), INT32, env);
   operand ret(INT32, env->new_name());
   vp.mul(*env->cur_stream, e1_, e2_, ret);
   return ret;
@@ -1161,7 +1163,7 @@ operand divide_class::code(CgenEnvironment *env) {
   if (cgen_debug)
     std::cerr << "div" << endl;
   ValuePrinter vp(*env->cur_stream);
-  auto e1_ = e1->code(env), e2_ = e2->code(env);
+  auto e1_ = conform(e1->code(env), INT32, env), e2_ = conform(e2->code(env), INT32, env);
   operand cmp(INT1, env->new_name());
   vp.icmp(*env->cur_stream, EQ, e2_, int_value(0), cmp);
   auto ok = env->new_ok_label();
@@ -1176,7 +1178,7 @@ operand neg_class::code(CgenEnvironment *env) {
   if (cgen_debug)
     std::cerr << "neg" << endl;
   ValuePrinter vp(*env->cur_stream);
-  auto e1_ = e1->code(env);
+  auto e1_ = conform(e1->code(env), INT32, env);
   operand ret(INT32, env->new_name());
   vp.sub(*env->cur_stream, int_value(0), e1_, ret);
   return ret;
@@ -1186,7 +1188,7 @@ operand lt_class::code(CgenEnvironment *env) {
   if (cgen_debug)
     std::cerr << "lt" << endl;
   ValuePrinter vp(*env->cur_stream);
-  auto e1_ = e1->code(env), e2_ = e2->code(env);
+  auto e1_ = conform(e1->code(env), INT32, env), e2_ = conform(e2->code(env), INT32, env);
   operand ret(INT1, env->new_name());
   vp.icmp(*env->cur_stream, LT, e1_, e2_, ret);
   return ret;
@@ -1239,7 +1241,7 @@ operand leq_class::code(CgenEnvironment *env) {
   if (cgen_debug)
     std::cerr << "leq" << endl;
   ValuePrinter vp(*env->cur_stream);
-  auto e1_ = e1->code(env), e2_ = e2->code(env);
+  auto e1_ = conform(e1->code(env), INT32, env), e2_ = conform(e2->code(env), INT32, env);
   operand ret(INT1, env->new_name());
   vp.icmp(*env->cur_stream, LE, e1_, e2_, ret);
   return ret;
@@ -1249,7 +1251,7 @@ operand comp_class::code(CgenEnvironment *env) {
   if (cgen_debug)
     std::cerr << "complement" << endl;
   ValuePrinter vp(*env->cur_stream);
-  auto e1_ = e1->code(env);
+  auto e1_ = conform(e1->code(env), INT32, env);
   operand ret(INT1, env->new_name());
   vp.xor_in(*env->cur_stream, e1_, bool_value(true, true), ret);
   return ret;
@@ -1638,6 +1640,7 @@ void attr_class::code(CgenEnvironment *env) {
   ValuePrinter vp(*env->cur_stream);
   auto rvalue = init->code(env);
   if (rvalue.is_empty()) {  // no_expr
+    // cout << env->get_class()->sym2type(type_decl).get_name() << endl;
     env->res = type2initval(env->get_class()->sym2type(type_decl), env);
   } else {
     env->res = rvalue;

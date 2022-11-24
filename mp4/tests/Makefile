@@ -19,7 +19,8 @@ LLCFLAGSSTAT = -regalloc=simple -stats
 	$(LLC) $(LLCFLAGS) $*.ll -O0 2> >(tee stderr)
 
 %.stat: %.ll $(LLC)
-	$(LLC) $(LLCFLAGSSTAT) $*.ll -O0 2> >(tee stat-$*) 
+	@$(LLC) $(LLCFLAGSSTAT) $*.ll -O0 2> stat-$*
+	- grep 'stores\|loads' stat-$* --color
 
 %.test: %.ll $(LLC) 
 	$(LLC) $(LLCFLAGS) $*.ll -O0
@@ -27,7 +28,7 @@ LLCFLAGSSTAT = -regalloc=simple -stats
 	$(LLC) $(LLCFLAGS) $*.ll -O2
 
 %.exe: %.s
-	$(CC) -g $+ -o $@
+	$(CXX) -g $+ -o $@
 
 %.run: %.exe
 	./$+
@@ -36,10 +37,13 @@ LLCFLAGSSTAT = -regalloc=simple -stats
 	llc-12 $*.ll -o $@
 
 %.diff: %.exe %.ref.exe
-	./test $+
+	- ./test $+ $*.in
+
+%.ll: %.cpp
+	clang++ -O0 $*.cpp -emit-llvm -S
 
 clean:
-	rm *.s
+	rm *.s stat-* stderr o1 o2
 
 .PHONY: clean
-.PRECIOUS: %.s %.exe
+.PRECIOUS: %.s %.exe %.ll

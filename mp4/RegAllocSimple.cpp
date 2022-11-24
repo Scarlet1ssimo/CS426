@@ -93,22 +93,44 @@ class RegAllocSimple : public MachineFunctionPass {
         NumStores++;
         LiveVirtRegs.erase(kv.first);
     }
+    bool overlapIn(const DenseSet<MCRegister> &S, const MCPhysReg &R) {
+        for (MCRegUnitIterator Units(R, TRI); Units.isValid(); ++Units)
+            if (S.contains(*Units))
+                return true;
+        return false;
+    }
+    bool overlapUnit(const DenseSet<MCRegister> &S, const MCPhysReg &R) {
+        DenseSet<MCRegister> tmp;
+        for (auto w : S)
+            insertRegUnit(tmp, w);
+        return overlapIn(tmp, R);
+    }
+    bool overlapUnit(const MCPhysReg &R1, const MCPhysReg &R2) {
+        DenseSet<MCRegister> tmp;
+        insertRegUnit(tmp, R1);
+        return overlapIn(tmp, R2);
+    }
+    void insertRegUnit(DenseSet<MCRegister> &S, const MCPhysReg &PhysReg) {
+        for (MCRegUnitIterator Units(PhysReg, TRI); Units.isValid(); ++Units)
+            S.insert(*Units);
+    }
     MCRegister getUnusedPhysReg(MachineOperand &MO, const llvm::TargetRegisterClass *RC) {
         // - Find unused physical register P
         auto IsExistingPhysReg = [&](MCPhysReg R) {
-            return ExistingPhysRegs.contains(R);
+            return overlapUnit(ExistingPhysRegs, R);
         };
         auto IsLivePhysRegs = [&](MCPhysReg R) {
-            return LivePhysRegs.contains(R);
+            return overlapUnit(LivePhysRegs, R);
         };
         auto IsUsedInInstr = [&](MCPhysReg R) {
-            return UsedInInstr.contains(R);
+            return overlapUnit(UsedInInstr, R);
         };
         auto IsAllocByLiveVirtReg = [&](MCPhysReg R) {
             for (auto kv : LiveVirtRegs)
-                if (R == kv.second) return true;
+                if (overlapUnit(R, kv.second)) return true;
             return false;
         };
+        DBGS("REGFIND") << "Try1" << endl;
         for (auto R : RegClassInfo.getOrder(RC)) {
             if (!IsAllocByLiveVirtReg(R) && !IsExistingPhysReg(R)) {
                 if (VirtRegAcrossFunction.contains(&MO)) {
@@ -123,11 +145,13 @@ class RegAllocSimple : public MachineFunctionPass {
             }
         }
 
+        DBGS("REGFIND") << "Try2" << endl;
         for (auto R : RegClassInfo.getOrder(RC)) {
             //- Try allocate nonexisting physical reg
             if (!IsAllocByLiveVirtReg(R) && !IsExistingPhysReg(R))
                 return R;
         }
+        DBGS("REGFIND") << "Try3" << endl;
         for (auto R : RegClassInfo.getOrder(RC)) {
             //- Try allocate non-living physical reg
             if (!IsAllocByLiveVirtReg(R) && !IsLivePhysRegs(R))
@@ -135,13 +159,19 @@ class RegAllocSimple : public MachineFunctionPass {
         }
         // - If not found;
         // -    Find P that currently use, spill; not in UsedInInstr
+        DBGS("REGFIND") << "Try4" << endl;
         for (auto kv : LiveVirtRegs) {
             if (!IsUsedInInstr(kv.second) && !IsLivePhysRegs(kv.second)) {
                 // - insert Store
-                assert(SpillMap.count(kv.first));
+                // assert(SpillMap.count(kv.first));
                 invalidateAndSpill(MO, kv, MO.isKill());
-                return kv.second;
+                break;
             }
+        }
+        for (auto R : RegClassInfo.getOrder(RC)) {
+            //- Try allocate non-living physical reg
+            if (!IsAllocByLiveVirtReg(R) && !IsLivePhysRegs(R))
+                return R;
         }
         assert(false);
     }
@@ -198,6 +228,7 @@ class RegAllocSimple : public MachineFunctionPass {
             if (MO.clobbersPhysReg(kv.second)) {
                 // - Function call modifies this register
                 // - so spill virtual reg
+                // if (!MO.isKill() || !MO.isDead())
                 invalidateAndSpill(MO, kv);
                 DBGS("Call Invalidate") << "reg of " << printReg(kv.first) << endl;
             }
@@ -206,10 +237,11 @@ class RegAllocSimple : public MachineFunctionPass {
     void handlePhysicalOperand(MachineOperand &MO, Register PhysReg) {
         if (MO.isDef()) {
             for (auto kv : LiveVirtRegs) {
-                if (PhysReg == kv.second) {
+                if (overlapUnit(PhysReg, kv.second)) {
                     // - This register is defined by MO
                     // - so spill virtual reg
-                    invalidateAndSpill(MO, kv);
+                    if (!MO.isKill() || !MO.isDead())
+                        invalidateAndSpill(MO, kv);
                     DBGS("Phys Invalidate") << "reg of " << printReg(kv.first) << endl;
                 }
             }
@@ -253,6 +285,7 @@ class RegAllocSimple : public MachineFunctionPass {
                 }
             }
         }
+        VirtRegAcrossFunction.clear();
         RegSet AfterFunction, BeforeFunction;
 
         for (MachineInstr &I : reverse(MBB)) {
@@ -283,8 +316,10 @@ class RegAllocSimple : public MachineFunctionPass {
         // - Spill all regs in LVR[]
         for (auto kv : LiveVirtRegs) {
             if (DirtyVirtReg.contains(kv.first)) {
-                DBGS("DirtySpill") << *MBB.getFirstTerminator();
-                dbgs() << printReg(kv.first) << ' ' << printReg(kv.second) << endl;
+                DBGS("DirtySpill")
+                    // << *MBB.getFirstTerminator();
+                    // dbgs()
+                    << printReg(kv.first) << ' ' << printReg(kv.second) << endl;
                 auto qwq = allocateStackSlot(kv.first);
                 TII->storeRegToStackSlot(MBB, MBB.getFirstTerminator(), kv.second, false, qwq, MRI->getRegClass(kv.first), TRI);
                 NumStores++;
@@ -368,10 +403,10 @@ class RegAllocSimple : public MachineFunctionPass {
         // x Subregisters? didn't check overlaps
         // x Simple function calls
         // x Physical regs
-        // - no dirty no spill
+        // x no dirty no spill
         // x no spill at return
         // x don't spill after killed
-        // - use callee saved register for vreg across function
+        // x use callee saved register for vreg across function
 
         setKillFlags(MF);
 
@@ -395,43 +430,6 @@ class RegAllocSimple : public MachineFunctionPass {
 
         return true;
     }
-    // uint dfs_clock = 0;
-    // DenseMap<MachineBasicBlock *, uint> in_clock;
-    // DenseMap<MachineBasicBlock *, uint> ou_clock;
-    // uint setKillFlags(MachineBasicBlock &MB) {
-    //     // visited.insert(&MB);
-    //     auto c = dfs_clock++;
-    //     in_clock[&MB] = c;
-    //     uint lowest = ~0;
-    //     auto &RS = ReachableVReg[&MB];
-    //     for (auto SBB : MB.successors()) {
-    //         if (in_clock.count(SBB)){
-    //             lowest = std::min(lowest, in_clock[SBB]);
-    //         }
-    //         else
-    //             lowest = std::min(lowest, setKillFlags(*SBB));
-    //         if (in_clock[SBB] > c) {
-    //             set_union(RS, ReachableVReg[SBB]);
-    //         }
-    //     }
-    //     if (lowest > c) {
-    //         // - Not in a loop
-    //         for (auto &MI : reverse(MB)) {
-    //             for (auto &MO : reverse(MI.operands())) {
-    //                 if (MO.isReg() && MO.getReg().isVirtual()) {
-    //                     auto Vi = MO.getReg().virtRegIndex();
-    //                     if (!RS.contains(Vi)) {
-    //                         RS.insert(Vi);
-    //                         MO.setIsKill();
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     } else {
-    //         // In a loop
-    //     }
-    //     return std::min(lowest, c);
-    // }
 };
 }  // namespace
 
