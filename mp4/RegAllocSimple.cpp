@@ -45,12 +45,14 @@ class RegAllocSimple : public MachineFunctionPass {
     RegisterClassInfo RegClassInfo;
 
     // - maintain information about live registers
+    using RegSet = DenseSet<uint>;
     DenseMap<Register, MCPhysReg> LiveVirtRegs;
     DenseMap<Register, int> SpillMap;
     DenseSet<MCRegister> UsedInInstr;
     DenseSet<MCRegister> LivePhysRegs;
     DenseSet<Register> DirtyVirtReg;
     DenseSet<MCRegister> ExistingPhysRegs;  // - For Prioritize
+    DenseSet<MachineOperand *> VirtRegAcrossFunction;
 
    public:
     StringRef
@@ -195,7 +197,7 @@ class RegAllocSimple : public MachineFunctionPass {
             if (MO.isUse()) {
                 // - A virtual register not in LiveVirt must be Spilled.
                 int Slot = allocateStackSlot(VirtReg);
-                DBGS("Reg Load") << MO;
+                // DBGS("Reg Load") << MO;
                 TII->loadRegFromStackSlot(*MO.getParent()->getParent(), MO.getParent(), P, Slot, RC, TRI);
                 NumLoads++;
             }
@@ -228,7 +230,7 @@ class RegAllocSimple : public MachineFunctionPass {
             if (MO.clobbersPhysReg(kv.second)) {
                 // - Function call modifies this register
                 // - so spill virtual reg
-                // if (!MO.isKill() || !MO.isDead())
+                // if (!MO.isKill() && !MO.isDead())
                 invalidateAndSpill(MO, kv);
                 DBGS("Call Invalidate") << "reg of " << printReg(kv.first) << endl;
             }
@@ -240,16 +242,15 @@ class RegAllocSimple : public MachineFunctionPass {
                 if (overlapUnit(PhysReg, kv.second)) {
                     // - This register is defined by MO
                     // - so spill virtual reg
-                    if (!MO.isKill() || !MO.isDead())
+                    if (!MO.isKill() && !MO.isDead())
                         invalidateAndSpill(MO, kv);
                     DBGS("Phys Invalidate") << "reg of " << printReg(kv.first) << endl;
                 }
             }
             LivePhysRegs.insert(PhysReg);
-        } else {
-            if (MO.isDead() || MO.isKill()) {
-                LivePhysRegs.erase(PhysReg);
-            }
+        }
+        if (MO.isDead() || MO.isKill()) {
+            LivePhysRegs.erase(PhysReg);
         }
     }
 
@@ -271,12 +272,15 @@ class RegAllocSimple : public MachineFunctionPass {
         }
         DBGS("Out") << MI << endl;
     }
-    DenseSet<MachineOperand *> VirtRegAcrossFunction;
+
     void preprocessBasicBlock(MachineBasicBlock &MBB) {
         LiveVirtRegs.clear();
         LivePhysRegs.clear();
         ExistingPhysRegs.clear();
         DirtyVirtReg.clear();
+        for (auto args : MBB.liveins()) {
+            LivePhysRegs.insert(args.PhysReg);
+        }
         for (MachineInstr &I : MBB) {
             // - Probe Physical register uses
             for (auto &MO : I.operands()) {
@@ -289,14 +293,12 @@ class RegAllocSimple : public MachineFunctionPass {
         RegSet AfterFunction, BeforeFunction;
 
         for (MachineInstr &I : reverse(MBB)) {
-            for (auto &MO : I.operands()) {
+            for (auto &MO : reverse(I.operands())) {
                 if (MO.isReg() && MO.getReg().isVirtual()) {
                     auto rv = MO.getReg().virtRegIndex();
-                    if (MO.isDead() || MO.isKill()) {
-                        if (!BeforeFunction.contains(rv))
-                            AfterFunction.insert(rv);
-                    }
-                    if (BeforeFunction.contains(rv)) {
+                    if (!BeforeFunction.contains(rv))
+                        AfterFunction.insert(rv);
+                    else {
                         DBGS("VirtRegAcrossFunction") << rv << endl;
                         VirtRegAcrossFunction.insert(&MO);
                     }
@@ -321,14 +323,14 @@ class RegAllocSimple : public MachineFunctionPass {
                     // dbgs()
                     << printReg(kv.first) << ' ' << printReg(kv.second) << endl;
                 auto qwq = allocateStackSlot(kv.first);
-                TII->storeRegToStackSlot(MBB, MBB.getFirstTerminator(), kv.second, false, qwq, MRI->getRegClass(kv.first), TRI);
+                TII->storeRegToStackSlot(MBB, MBB.getFirstTerminator(), kv.second, true, qwq, MRI->getRegClass(kv.first), TRI);
                 NumStores++;
             } else {
                 DBGS("NonDirtyNoSpill") << printReg(kv.first) << ' ' << printReg(kv.second) << endl;
             }
         }
     }
-    using RegSet = DenseSet<uint>;
+
     static bool set_union(RegSet &A, const RegSet &B) {
         bool changed = 0;
         for (auto q : B) {
@@ -408,7 +410,7 @@ class RegAllocSimple : public MachineFunctionPass {
         // x don't spill after killed
         // x use callee saved register for vreg across function
 
-        setKillFlags(MF);
+        // setKillFlags(MF);
 
         SpillMap.clear();
         // Allocate each basic block locally

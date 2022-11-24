@@ -8,7 +8,7 @@ SRCS	= $(wildcard *.ll)
 test:	$(SRCS:%.ll=%.diff)
 stat:	$(SRCS:%.ll=%.stat)
 
-LLCFLAGS = -regalloc=simple -stats -verify-machineinstrs -debug-only=regalloc
+LLCFLAGS = -regalloc=simple -stats -verify-machineinstrs
 LLCFLAGSSTAT = -regalloc=simple -stats
 # LLCFLAGS = -regalloc=simple -stats -verify-machineinstrs -debug
 
@@ -16,7 +16,7 @@ LLCFLAGSSTAT = -regalloc=simple -stats
 	$(LLC) $(LLCFLAGS) $*.ll -O0
 
 %.dbg: %.ll $(LLC)
-	$(LLC) $(LLCFLAGS) $*.ll -O0 2> >(tee stderr)
+	$(LLC) $(LLCFLAGS) -debug-only=regalloc $*.ll -O0 2> >(tee stderr)
 
 %.stat: %.ll $(LLC)
 	@$(LLC) $(LLCFLAGSSTAT) $*.ll -O0 2> stat-$*
@@ -37,7 +37,7 @@ LLCFLAGSSTAT = -regalloc=simple -stats
 	llc-12 $*.ll -o $@
 
 %.diff: %.exe %.ref.exe
-	- ./test $+ $*.in
+	./test $+ $*.in
 
 %.ll: %.cpp
 	clang++ -O0 $*.cpp -emit-llvm -S
