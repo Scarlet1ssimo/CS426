@@ -1,7 +1,7 @@
 SHELL=/bin/bash
 LEVEL=..
-CC=clang
-CXX=clang++
+CC=clang-12
+CXX=clang++-12
 include ../Makefile
 
 SRCS	= $(wildcard *.ll)

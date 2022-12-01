@@ -210,7 +210,11 @@ class RegAllocSimple : public MachineFunctionPass {
             DirtyVirtReg.insert(VirtReg);
         }
 
-        if (MO.isDead() || MO.isKill()) {
+        // if (MO.isTied()) {
+        //     DBGS("Tied") << printReg(VirtReg) << endl;
+        // }
+
+        if (((!MO.isTied() && MO.isDead()) || MO.isKill())) {
             DBGS("Erase") << printReg(VirtReg) << endl;
             LiveVirtRegs.erase(VirtReg);
         }
