@@ -134,7 +134,7 @@ class RegAllocSimple : public MachineFunctionPass {
         };
         DBGS("REGFIND") << "Try1" << endl;
         for (auto R : RegClassInfo.getOrder(RC)) {
-            if (!IsAllocByLiveVirtReg(R) && !IsExistingPhysReg(R)) {
+            if (!IsAllocByLiveVirtReg(R) && !IsExistingPhysReg(R) && !IsUsedInInstr(R)) {
                 // DBGS("REGFIND") << "Looking@" << printReg(R) << endl;
                 if (VirtRegAcrossFunction.contains(&MO)) {
                     // - Try allocate callee-saved reg if across calls
@@ -151,13 +151,13 @@ class RegAllocSimple : public MachineFunctionPass {
         DBGS("REGFIND") << "Try2" << endl;
         for (auto R : RegClassInfo.getOrder(RC)) {
             //- Try allocate nonexisting physical reg
-            if (!IsAllocByLiveVirtReg(R) && !IsExistingPhysReg(R))
+            if (!IsAllocByLiveVirtReg(R) && !IsExistingPhysReg(R) && !IsUsedInInstr(R))
                 return R;
         }
         DBGS("REGFIND") << "Try3" << endl;
         for (auto R : RegClassInfo.getOrder(RC)) {
             //- Try allocate non-living physical reg
-            if (!IsAllocByLiveVirtReg(R) && !IsLivePhysRegs(R))
+            if (!IsAllocByLiveVirtReg(R) && !IsLivePhysRegs(R) && !IsUsedInInstr(R))
                 return R;
         }
         // - If not found;
@@ -198,7 +198,7 @@ class RegAllocSimple : public MachineFunctionPass {
             if (MO.isUse()) {
                 // - A virtual register not in LiveVirt must be Spilled.
                 int Slot = allocateStackSlot(VirtReg);
-                // DBGS("Reg Load") << MO;
+                DBGS("Reg Load") << printReg(VirtReg) << endl;
                 TII->loadRegFromStackSlot(*MO.getParent()->getParent(), MO.getParent(), P, Slot, RC, TRI);
                 NumLoads++;
             }
@@ -214,7 +214,7 @@ class RegAllocSimple : public MachineFunctionPass {
         //     DBGS("Tied") << printReg(VirtReg) << endl;
         // }
 
-        if (((!MO.isTied() && MO.isDead()) || MO.isKill())) {
+        if (MO.isDead() || MO.isKill()) {
             DBGS("Erase") << printReg(VirtReg) << endl;
             LiveVirtRegs.erase(VirtReg);
         }
@@ -262,7 +262,7 @@ class RegAllocSimple : public MachineFunctionPass {
     void allocateInstruction(MachineInstr &MI) {
         DBGS("In") << MI;
         UsedInInstr.clear();
-        for (auto &MO : MI.operands()) {
+        for (auto &MO : reverse(MI.operands())) {
             if (MO.isReg()) {
                 auto R = MO.getReg();
                 if (R.isVirtual())
@@ -298,7 +298,7 @@ class RegAllocSimple : public MachineFunctionPass {
         RegSet AfterFunction, BeforeFunction;
 
         for (MachineInstr &I : reverse(MBB)) {
-            for (auto &MO : reverse(I.operands())) {
+            for (auto &MO : (I.operands())) {
                 if (MO.isReg() && MO.getReg().isVirtual()) {
                     auto rv = MO.getReg().virtRegIndex();
                     if (!BeforeFunction.contains(rv))
@@ -351,9 +351,9 @@ class RegAllocSimple : public MachineFunctionPass {
         DenseMap<MachineBasicBlock *, RegSet> ReachableVReg;
         for (auto &MBB : MF) {
             for (auto &MI : reverse(MBB)) {
-                for (auto &MO : reverse(MI.operands())) {
+                for (auto &MO : (MI.operands())) {
                     if (MO.isReg() && MO.getReg().isVirtual()) {
-                        if (MO.isUse())
+                        if (MO.isUse() || MO.isTied())
                             ReachableVReg[&MBB].insert(MO.getReg().virtRegIndex());
                         else
                             ReachableVReg[&MBB].erase(MO.getReg().virtRegIndex());
@@ -376,14 +376,17 @@ class RegAllocSimple : public MachineFunctionPass {
                 set_union(RS, ReachableVReg[SBB]);
             }
             for (auto &MI : reverse(MBB)) {
-                for (auto &MO : reverse(MI.operands())) {
+                for (auto &MO : (MI.operands())) {
                     if (MO.isReg() && MO.getReg().isVirtual()) {
                         auto Vi = MO.getReg().virtRegIndex();
-                        if (MO.isUse()) {
+                        if (MO.isUse() || MO.isTied()) {
                             if (!RS.contains(Vi)) {
                                 DBGS("Set Kill") << printReg(MO.getReg()) << " in " << MI;
                                 RS.insert(Vi);
-                                MO.setIsKill();
+                                if (MO.isUse())
+                                    MO.setIsKill();
+                                else
+                                    MO.setIsDead();
                             }
                         } else {
                             DBGS("Set UnKill") << printReg(MO.getReg()) << " in " << MI;
