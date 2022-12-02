@@ -57,4 +57,3 @@ MCRegister getUnusedPhysReg(MachineOperand &MO, TargetRegisterClass *RC) {
     // Other usual methods
 }
 ```
-

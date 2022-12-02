@@ -125,7 +125,7 @@ class RegAllocSimple : public MachineFunctionPass {
             return overlapUnit(LivePhysRegs, R);
         };
         auto IsUsedInInstr = [&](MCPhysReg R) {
-            return overlapUnit(UsedInInstr, R);
+            return MO.isUse() && overlapUnit(UsedInInstr, R);
         };
         auto IsAllocByLiveVirtReg = [&](MCPhysReg R) {
             for (auto kv : LiveVirtRegs)
@@ -262,7 +262,7 @@ class RegAllocSimple : public MachineFunctionPass {
     void allocateInstruction(MachineInstr &MI) {
         DBGS("In") << MI;
         UsedInInstr.clear();
-        for (auto &MO : reverse(MI.operands())) {
+        auto wrnm = [&](MachineOperand &MO) {
             if (MO.isReg()) {
                 auto R = MO.getReg();
                 if (R.isVirtual())
@@ -274,6 +274,18 @@ class RegAllocSimple : public MachineFunctionPass {
                 DBGS("REGMASK") << MO << endl;
                 invalidateUnpreservedRegs(MO);
             }
+        };
+        for (auto &MO : reverse(MI.operands())) {
+            if (MO.isReg() && MO.isUse())
+                wrnm(MO);
+        }
+        for (auto &MO : reverse(MI.operands())) {
+            if (MO.isRegMask())
+                wrnm(MO);
+        }
+        for (auto &MO : MI.operands()) {
+            if (MO.isReg() && MO.isDef())
+                wrnm(MO);
         }
         DBGS("Out") << MI << endl;
     }
@@ -389,7 +401,11 @@ class RegAllocSimple : public MachineFunctionPass {
                                     MO.setIsDead();
                             }
                         } else {
-                            DBGS("Set UnKill") << printReg(MO.getReg()) << " in " << MI;
+                            if (!RS.contains(Vi)) {
+                                DBGS("Set Kill") << printReg(MO.getReg()) << " in " << MI;
+                                MO.setIsDead();
+                            }
+                            DBGS("Set UnKill") << printReg(MO.getReg()) << " since " << MI;
                             RS.erase(Vi);
                         }
                     }
